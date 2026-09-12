@@ -1,0 +1,29 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_APP: run.py
+      FLASK_ENV: development
+      CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - ./backend:/app
+    command: python run.py
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: postgen_ai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
