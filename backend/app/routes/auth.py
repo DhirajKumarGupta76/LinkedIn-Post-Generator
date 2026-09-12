@@ -2,7 +2,9 @@ import re
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from sqlalchemy.exc import IntegrityError
 
+from app import ensure_database_schema
 from app.extensions import db, limiter
 from app.models.user import User
 from app.services.auth_service import authenticate_user, create_user, generate_tokens, hash_password, validate_password
@@ -23,6 +25,7 @@ def build_error(code, message, status_code):
 @auth_bp.post('/register')
 @limiter.limit('5/minute')
 def register():
+    ensure_database_schema(current_app)
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
     email = (data.get('email') or '').strip().lower()
@@ -44,7 +47,14 @@ def register():
         if User.query.filter_by(email=email).first():
             return build_error('EMAIL_ALREADY_EXISTS', 'An account with this email already exists.', 409)
 
-        user = create_user(name=name, email=email, password=password)
+        try:
+            user = create_user(name=name, email=email, password=password)
+        except IntegrityError:
+            db.session.rollback()
+            if User.query.filter_by(email=email).first():
+                return build_error('EMAIL_ALREADY_EXISTS', 'An account with this email already exists.', 409)
+            raise
+
         access_token, refresh_token = generate_tokens(user)
         response = jsonify({
             'success': True,
@@ -56,13 +66,14 @@ def register():
         response.set_cookie('refresh_token', refresh_token, httponly=True, samesite='Lax', secure=False, max_age=7 * 24 * 60 * 60)
         return response, 201
     except Exception:
-        current_app.logger.exception('Registration failed for email=%s', email)
+        current_app.logger.exception('Registration failed for email=%s; payload=%s', email, data)
         return build_error('REGISTRATION_FAILED', 'Unable to create account. Please try again.', 500)
 
 
 @auth_bp.post('/login')
 @limiter.limit('5/minute')
 def login():
+    ensure_database_schema(current_app)
     data = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip().lower()
     password = data.get('password')
@@ -85,7 +96,7 @@ def login():
         response.set_cookie('refresh_token', refresh_token, httponly=True, samesite='Lax', secure=False, max_age=7 * 24 * 60 * 60)
         return response, 200
     except Exception:
-        current_app.logger.exception('Login failed for email=%s', email)
+        current_app.logger.exception('Login failed for email=%s; payload=%s', email, data)
         return build_error('LOGIN_FAILED', 'Unable to login. Please try again.', 500)
 
 

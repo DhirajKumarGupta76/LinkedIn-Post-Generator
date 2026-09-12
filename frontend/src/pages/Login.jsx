@@ -21,10 +21,29 @@ export default function Login() {
     setError('')
   }
 
+  const validateForm = () => {
+    if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      return 'Please enter a valid email address.'
+    }
+
+    if (!form.password) {
+      return 'Password is required.'
+    }
+
+    return ''
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setLoading(true)
     setError('')
+
+    const validationError = validateForm()
+    if (validationError) {
+      setError(validationError)
+      setLoading(false)
+      return
+    }
 
     try {
       const response = await loginUser(form)

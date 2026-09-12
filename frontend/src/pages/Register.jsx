@@ -26,10 +26,42 @@ export default function Register() {
     setError('')
   }
 
+  const validateForm = () => {
+    if (!form.name.trim() || form.name.trim().length < 2) {
+      return 'Name is required and must be at least 2 characters long.'
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailPattern.test(form.email.trim())) {
+      return 'Please enter a valid email address.'
+    }
+
+    if (form.password.length < 8) {
+      return 'Password must be at least 8 characters long.'
+    }
+
+    if (!/[A-Z]/.test(form.password) || !/[a-z]/.test(form.password) || !/\d/.test(form.password) || !/[^A-Za-z0-9]/.test(form.password)) {
+      return 'Password must include uppercase, lowercase, a number, and a special character.'
+    }
+
+    if (form.password !== form.confirm_password) {
+      return 'Passwords do not match.'
+    }
+
+    return ''
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setLoading(true)
     setError('')
+
+    const validationError = validateForm()
+    if (validationError) {
+      setError(validationError)
+      setLoading(false)
+      return
+    }
 
     try {
       const response = await registerUser(form)

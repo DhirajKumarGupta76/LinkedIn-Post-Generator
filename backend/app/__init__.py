@@ -23,7 +23,11 @@ def ensure_database_schema(app):
 
         for column in missing_columns:
             column_type = column.type.compile(dialect=db.engine.dialect)
-            db.session.execute(text(f'ALTER TABLE users ADD COLUMN {column.name} {column_type}'))
+            try:
+                db.session.execute(text(f'ALTER TABLE users ADD COLUMN {column.name} {column_type}'))
+            except Exception:
+                db.session.rollback()
+                raise
 
         if missing_columns:
             db.session.commit()
@@ -111,7 +115,5 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(posts_bp)
-
-    ensure_database_schema(app)
 
     return app
