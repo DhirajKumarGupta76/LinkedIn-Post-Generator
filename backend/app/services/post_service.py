@@ -4,7 +4,10 @@ import re
 from app.extensions import db
 from app.models.generated_post import GeneratedPost
 from app.models.saved_post import SavedPost
+from app.models.user import User
 from app.services.ai_service import generate_post, generate_variations
+from app.services.personalization_service import PersonalizationService
+from app.services.repurpose_service import RepurposeService
 
 
 class PostService:
@@ -22,8 +25,10 @@ class PostService:
     @staticmethod
     def generate_for_user(user_id, payload):
         validated = PostService.validate_payload(payload)
-        primary = generate_post(validated)
-        variations = generate_variations(validated)
+        user = User.query.get(int(user_id))
+        enriched = PersonalizationService.enrich_payload(validated, user)
+        primary = generate_post(enriched)
+        variations = generate_variations(enriched)
         result = {
             'user_id': user_id,
             'content': primary['content'],
@@ -37,7 +42,9 @@ class PostService:
     @staticmethod
     def create_generated_post(user_id, payload):
         validated = PostService.validate_payload(payload)
-        generated = generate_post(validated)
+        user = User.query.get(int(user_id))
+        enriched = PersonalizationService.enrich_payload(validated, user)
+        generated = generate_post(enriched)
         post = GeneratedPost(
             user_id=int(user_id),
             topic=str(validated['topic']).strip(),
@@ -152,14 +159,21 @@ class PostService:
 
     @staticmethod
     def generate_ai_edit(user_id, post_id, action, payload=None):
-        post = PostService.get_for_user(user_id, post_id)
-        content = (post.edited_content or post.generated_content or '').strip()
-        if not content:
-            raise ValueError('No content to improve.')
+        user = User.query.get(int(user_id))
+        post = None
+        if post_id is not None and post_id != '':
+            post = PostService.get_for_user(user_id, post_id)
+
+        content = ''
+        if post is not None:
+            content = (post.edited_content or post.generated_content or '').strip()
         payload = payload or {}
-        text = str(payload.get('text') or content)
+        text = str(payload.get('text') or content or '').strip()
+        topic = str(payload.get('topic') or (post.topic if post else '')).strip()
 
         if action == 'improve':
+            if not content:
+                raise ValueError('No content to improve.')
             result = generate_post({
                 'topic': post.topic,
                 'achievement': post.achievement,
@@ -172,23 +186,23 @@ class PostService:
             })
             output = result['content']
         elif action == 'shorten':
-            output = ' '.join(text.split()[:max(40, len(text.split()) // 2)])
+            output = ' '.join(text.split()[:max(40, len(text.split()) // 2)]) if text else 'Shortened version unavailable.'
         elif action == 'expand':
-            output = text + ' This is an opportunity to bring more depth, context, and reflection to the story for a richer professional audience.'
+            output = text + ' This is an opportunity to bring more depth, context, and reflection to the story for a richer professional audience.' if text else 'Expanded version unavailable.'
         elif action == 'fix_grammar':
-            output = re.sub(r'\s+', ' ', text)
+            output = re.sub(r'\s+', ' ', text) if text else 'Grammar fix unavailable.'
         elif action == 'make_professional':
-            output = text + ' I appreciate the opportunity to keep building with focus, discipline, and purpose.'
+            output = text + ' I appreciate the opportunity to keep building with focus, discipline, and purpose.' if text else 'Professional version unavailable.'
         elif action == 'make_casual':
-            output = text + ' It has been a genuinely rewarding experience, and I am grateful for the journey.'
+            output = text + ' It has been a genuinely rewarding experience, and I am grateful for the journey.' if text else 'Casual version unavailable.'
         elif action == 'make_inspirational':
-            output = text + ' Progress is built through patience, learning, and the courage to keep going.'
+            output = text + ' Progress is built through patience, learning, and the courage to keep going.' if text else 'Inspirational version unavailable.'
         elif action == 'hook':
-            output = f"Here is the starting point: {text[:120]}"
+            output = PersonalizationService.generate_hooks(topic or text or 'my work', PersonalizationService.build_context_block(user))
         elif action == 'hashtags':
-            output = '#CareerGrowth #Leadership #Learning #ProfessionalDevelopment #LinkedIn'
+            output = PersonalizationService.generate_hashtags(topic or text or 'career growth', PersonalizationService.build_context_block(user))
         elif action == 'cta':
-            output = 'What are you building right now? I would love to hear what you are learning in the process.'
+            output = PersonalizationService.generate_ctas(PersonalizationService.build_context_block(user))
         else:
             raise ValueError('Unsupported action.')
 

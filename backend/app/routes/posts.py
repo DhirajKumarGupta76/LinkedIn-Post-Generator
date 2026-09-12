@@ -214,6 +214,31 @@ def generate_cta():
     return _ai_action('cta')
 
 
+@posts_bp.post('/ai/repurpose')
+@jwt_required()
+def repurpose_post():
+    user = get_current_user()
+    if not user:
+        return build_error('AUTH_REQUIRED', 'Authentication required.', 401)
+
+    payload = request.get_json(silent=True) or {}
+    content = payload.get('content')
+    platform = payload.get('platform')
+    if not content or not isinstance(content, str):
+        return build_error('VALIDATION_ERROR', 'content is required.', 400)
+    if not platform:
+        return build_error('VALIDATION_ERROR', 'platform is required.', 400)
+
+    try:
+        result = {
+            'content': __import__('app.services.repurpose_service', fromlist=['RepurposeService']).RepurposeService.repurpose(content, platform),
+            'platform': platform,
+        }
+        return jsonify({'success': True, 'data': result}), 200
+    except ValueError as exc:
+        return build_error('VALIDATION_ERROR', str(exc), 400)
+
+
 def _ai_action(action):
     user = get_current_user()
     if not user:
@@ -221,8 +246,8 @@ def _ai_action(action):
 
     payload = request.get_json(silent=True) or {}
     post_id = payload.get('post_id')
-    if not post_id:
-        return build_error('VALIDATION_ERROR', 'post_id is required.', 400)
+    if action in {'hook', 'hashtags', 'cta'} and not post_id and not payload.get('text') and not payload.get('topic'):
+        return build_error('VALIDATION_ERROR', 'text or topic is required.', 400)
 
     try:
         result = PostService.generate_ai_edit(user.id, post_id, action, payload)

@@ -1,9 +1,32 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+from sqlalchemy import inspect, text
 
 from app.config import get_config
 from app.extensions import db, jwt, limiter
+from app.models.user import User
+
+
+def ensure_database_schema(app):
+    with app.app_context():
+        inspector = inspect(db.engine)
+        if not inspector.has_table('users'):
+            db.create_all()
+            return
+
+        existing_columns = {column['name'] for column in inspector.get_columns('users')}
+        missing_columns = [
+            column for column in User.__table__.columns
+            if column.name not in existing_columns
+        ]
+
+        for column in missing_columns:
+            column_type = column.type.compile(dialect=db.engine.dialect)
+            db.session.execute(text(f'ALTER TABLE users ADD COLUMN {column.name} {column_type}'))
+
+        if missing_columns:
+            db.session.commit()
 
 
 def create_app():
@@ -59,7 +82,8 @@ def create_app():
         }), 405
 
     @app.errorhandler(500)
-    def internal_error(_error):
+    def internal_error(error):
+        app.logger.exception('Unhandled server error: %s', error)
         return jsonify({
             'success': False,
             'error': {
@@ -87,5 +111,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(posts_bp)
+
+    ensure_database_schema(app)
 
     return app

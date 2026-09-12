@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
-import { Sparkles, LoaderCircle, Copy, Save, RefreshCw, Share2, Pencil } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Sparkles, LoaderCircle, Copy, Save, RefreshCw, Share2, Pencil, Wand2, Hash, MessageSquareText, ArrowRight } from 'lucide-react'
 import Sidebar from '../components/Sidebar'
 import Navbar from '../components/Navbar'
 import Input from '../components/Input'
 import Button from '../components/Button'
-import api from '../services/api'
+import ShareButtons from '../components/ShareButtons'
+import api, { getCurrentUser } from '../services/api'
 
 const achievementOptions = [
   'New Job', 'Internship', 'Promotion', 'Certification', 'Project Completed', 'Hackathon', 'Competition',
@@ -43,8 +44,28 @@ export default function Generator() {
   const [error, setError] = useState('')
   const [posts, setPosts] = useState([])
   const [loadingStage, setLoadingStage] = useState(0)
+  const [profile, setProfile] = useState(null)
+  const [toast, setToast] = useState('')
+  const [hooks, setHooks] = useState([])
+  const [hashtags, setHashtags] = useState([])
+  const [ctas, setCtas] = useState([])
+  const [repurposeText, setRepurposeText] = useState('')
+  const [repurposePlatform, setRepurposePlatform] = useState('x')
+  const [repurposeResult, setRepurposeResult] = useState('')
 
   const selectedStyles = useMemo(() => loadingMessages, [])
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await getCurrentUser()
+        setProfile(response.data.user || null)
+      } catch (error) {
+        setProfile(null)
+      }
+    }
+    fetchProfile()
+  }, [])
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -63,7 +84,10 @@ export default function Generator() {
     }, 1000)
 
     try {
-      const response = await api.post('/posts/generate', form)
+      const response = await api.post('/posts/generate', {
+        ...form,
+        personalized_generation: Boolean(profile?.personal_brand_mode),
+      })
       const payload = response.data.data
       setPosts((prev) => [{
         id: Date.now(),
@@ -84,8 +108,50 @@ export default function Generator() {
   const handleCopy = async (content) => {
     try {
       await navigator.clipboard.writeText(content)
+      setToast('Post copied successfully!')
+      setTimeout(() => setToast(''), 2200)
     } catch (error) {
-      console.error('Copy failed', error)
+      setToast('Unable to copy this post.')
+      setTimeout(() => setToast(''), 2200)
+    }
+  }
+
+  const handleGenerateHooks = async () => {
+    if (!form.topic) return
+    try {
+      const response = await api.post('/ai/hooks', { post_id: Date.now(), text: form.topic })
+      setHooks(response.data.data?.content ? [response.data.data.content] : [])
+    } catch (error) {
+      setError('Unable to generate hooks right now.')
+    }
+  }
+
+  const handleGenerateHashtags = async () => {
+    if (!form.topic) return
+    try {
+      const response = await api.post('/ai/hashtags', { post_id: Date.now(), text: form.topic })
+      setHashtags(response.data.data?.content ? response.data.data.content.split(' ') : [])
+    } catch (error) {
+      setError('Unable to generate hashtags right now.')
+    }
+  }
+
+  const handleGenerateCtas = async () => {
+    try {
+      const response = await api.post('/ai/cta', { post_id: Date.now() })
+      setCtas(response.data.data?.content ? response.data.data.content.split('\n').filter(Boolean) : [])
+    } catch (error) {
+      setError('Unable to generate CTAs right now.')
+    }
+  }
+
+  const handleRepurpose = async () => {
+    if (!repurposeText) return
+    try {
+      const response = await api.post('/ai/repurpose', { content: repurposeText, platform: repurposePlatform })
+      setRepurposeResult(response.data.data.content)
+    } catch (error) {
+      setError('Unable to repurpose this content right now.')
     }
   }
 
@@ -170,24 +236,98 @@ export default function Generator() {
                 </div>
 
                 {error && <p className="text-sm text-rose-600">{error}</p>}
+                {toast && <p className="text-sm text-emerald-600">{toast}</p>}
 
                 <div className="flex flex-col gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:justify-between sm:items-center">
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <Sparkles className="h-4 w-4 text-violet-500" />
                     {isGenerating ? selectedStyles[loadingStage] : 'AI-powered professional writing'}
                   </div>
-                  <Button type="submit" disabled={isGenerating} className="min-w-[180px] justify-center">
-                    {isGenerating ? (
-                      <>
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      'Generate Post'
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                      <input type="checkbox" checked={Boolean(profile?.personal_brand_mode)} readOnly className="h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                      Personalized Generation
+                    </label>
+                    <Button type="submit" disabled={isGenerating} className="min-w-[180px] justify-center">
+                      {isGenerating ? (
+                        <>
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        'Generate Post'
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </form>
+            </div>
+
+            <div className="mt-8 grid gap-5 lg:grid-cols-2">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900">AI enhancement tools</h2>
+                <div className="mt-4 space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={handleGenerateHooks} className="gap-2"><Wand2 className="h-4 w-4" />Generate Hook</Button>
+                    <Button variant="secondary" onClick={handleGenerateHashtags} className="gap-2"><Hash className="h-4 w-4" />Generate Hashtags</Button>
+                    <Button variant="secondary" onClick={handleGenerateCtas} className="gap-2"><MessageSquareText className="h-4 w-4" />Generate CTAs</Button>
+                  </div>
+
+                  {hooks.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-sm font-medium text-slate-700">Hooks</p>
+                      <ul className="space-y-2 text-sm text-slate-600">
+                        {hooks.map((hook) => (
+                          <li key={hook} className="rounded-xl bg-slate-50 p-3">{hook}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {hashtags.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-sm font-medium text-slate-700">Hashtags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {hashtags.map((tag) => (
+                          <span key={tag} className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {ctas.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-sm font-medium text-slate-700">CTAs</p>
+                      <ul className="space-y-2 text-sm text-slate-600">
+                        {ctas.map((cta) => (
+                          <li key={cta} className="rounded-xl bg-slate-50 p-3">{cta}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900">Repurpose</h2>
+                <div className="mt-4 space-y-4">
+                  <textarea value={repurposeText} onChange={(event) => setRepurposeText(event.target.value)} rows={5} placeholder="Paste your LinkedIn post to repurpose for another platform" className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" />
+                  <div className="flex gap-3">
+                    <select value={repurposePlatform} onChange={(event) => setRepurposePlatform(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200">
+                      <option value="x">X post</option>
+                      <option value="instagram">Instagram caption</option>
+                      <option value="facebook">Facebook post</option>
+                      <option value="whatsapp">WhatsApp message</option>
+                      <option value="email">Email</option>
+                    </select>
+                    <Button variant="secondary" onClick={handleRepurpose} className="shrink-0"><ArrowRight className="mr-2 h-4 w-4" />Repurpose</Button>
+                  </div>
+
+                  {repurposeResult && (
+                    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 whitespace-pre-line">{repurposeResult}</div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {posts.length > 0 && (
@@ -221,10 +361,7 @@ export default function Generator() {
                         <RefreshCw className="h-4 w-4" />
                         Regenerate
                       </Button>
-                      <Button variant="secondary" className="gap-2">
-                        <Share2 className="h-4 w-4" />
-                        Share
-                      </Button>
+                      <ShareButtons content={post.content} title="LinkedIn Post" onCopy={handleCopy} />
                     </div>
                   </article>
                 ))}

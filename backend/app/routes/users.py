@@ -48,6 +48,28 @@ def update_me():
     user.name = name
     user.bio = bio if bio is not None else user.bio
     user.profile_image = profile_image if profile_image is not None else user.profile_image
+    for field in [
+        'profession',
+        'industry',
+        'skills',
+        'career_goal',
+        'target_audience',
+        'preferred_tone',
+        'preferred_style',
+        'linkedin_url',
+        'github_url',
+        'portfolio_url',
+    ]:
+        if field in data:
+            value = data.get(field)
+            if value is None or value == '':
+                setattr(user, field, None)
+            else:
+                setattr(user, field, str(value).strip())
+
+    if 'personal_brand_mode' in data:
+        user.personal_brand_mode = bool(data.get('personal_brand_mode'))
+
     db.session.commit()
 
     return jsonify({

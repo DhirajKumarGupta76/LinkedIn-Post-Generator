@@ -2,7 +2,10 @@ import os
 
 os.environ['TESTING'] = 'true'
 
+from sqlalchemy import text
+
 from app import create_app
+from app.extensions import db
 
 
 def setup_app():
@@ -70,6 +73,44 @@ def test_register_invalid_password_fails():
     assert response.status_code == 400
     payload = response.get_json()
     assert payload['error']['code'] == 'VALIDATION_ERROR'
+
+
+def test_register_legacy_sqlite_schema_is_migrated(tmp_path):
+    db_path = tmp_path / 'legacy_postgen.db'
+    legacy_db_url = f'sqlite:///{db_path}'
+
+    app = create_app()
+    app.config['TESTING'] = True
+    app.config['SQLALCHEMY_DATABASE_URI'] = legacy_db_url
+
+    with app.app_context():
+        db.session.execute(text('''
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                name VARCHAR(120) NOT NULL,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL,
+                profile_image VARCHAR(500),
+                bio TEXT,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                last_login DATETIME
+            )
+        '''))
+        db.session.commit()
+
+    client = app.test_client()
+    response = client.post('/api/auth/register', json={
+        'name': 'Legacy User',
+        'email': 'legacy@example.com',
+        'password': 'LegacyPass!123',
+        'confirm_password': 'LegacyPass!123'
+    })
+
+    assert response.status_code == 201, response.get_data(as_text=True)
+    payload = response.get_json()
+    assert payload['success'] is True
+    assert payload['user']['email'] == 'legacy@example.com'
 
 
 def test_login_success():

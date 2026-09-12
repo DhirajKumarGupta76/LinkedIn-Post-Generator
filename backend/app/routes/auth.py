@@ -1,6 +1,6 @@
 import re
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from app.extensions import db, limiter
@@ -29,31 +29,35 @@ def register():
     password = data.get('password')
     confirm_password = data.get('confirm_password')
 
-    if not name or len(name) < 2:
-        return build_error('VALIDATION_ERROR', 'Name is required and must be at least 2 characters long.', 400)
-    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
-        return build_error('VALIDATION_ERROR', 'Please enter a valid email address.', 400)
-    if not password or password != confirm_password:
-        return build_error('VALIDATION_ERROR', 'Passwords do not match.', 400)
+    try:
+        if not name or len(name) < 2:
+            return build_error('VALIDATION_ERROR', 'Name is required and must be at least 2 characters long.', 400)
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            return build_error('VALIDATION_ERROR', 'Please enter a valid email address.', 400)
+        if not password or password != confirm_password:
+            return build_error('VALIDATION_ERROR', 'Passwords do not match.', 400)
 
-    password_error = validate_password(password)
-    if password_error:
-        return build_error('VALIDATION_ERROR', password_error, 400)
+        password_error = validate_password(password)
+        if password_error:
+            return build_error('VALIDATION_ERROR', password_error, 400)
 
-    if User.query.filter_by(email=email).first():
-        return build_error('EMAIL_ALREADY_EXISTS', 'An account with this email already exists.', 409)
+        if User.query.filter_by(email=email).first():
+            return build_error('EMAIL_ALREADY_EXISTS', 'An account with this email already exists.', 409)
 
-    user = create_user(name=name, email=email, password=password)
-    access_token, refresh_token = generate_tokens(user)
-    response = jsonify({
-        'success': True,
-        'message': 'Registration successful.',
-        'access_token': access_token,
-        'refresh_token': refresh_token,
-        'user': user.to_public_dict(),
-    })
-    response.set_cookie('refresh_token', refresh_token, httponly=True, samesite='Lax', secure=False, max_age=7 * 24 * 60 * 60)
-    return response, 201
+        user = create_user(name=name, email=email, password=password)
+        access_token, refresh_token = generate_tokens(user)
+        response = jsonify({
+            'success': True,
+            'message': 'Registration successful.',
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': user.to_public_dict(),
+        })
+        response.set_cookie('refresh_token', refresh_token, httponly=True, samesite='Lax', secure=False, max_age=7 * 24 * 60 * 60)
+        return response, 201
+    except Exception:
+        current_app.logger.exception('Registration failed for email=%s', email)
+        return build_error('REGISTRATION_FAILED', 'Unable to create account. Please try again.', 500)
 
 
 @auth_bp.post('/login')
@@ -63,22 +67,26 @@ def login():
     email = (data.get('email') or '').strip().lower()
     password = data.get('password')
 
-    if not email or not password:
-        return build_error('INVALID_CREDENTIALS', 'Invalid email or password', 401)
+    try:
+        if not email or not password:
+            return build_error('INVALID_CREDENTIALS', 'Invalid email or password', 401)
 
-    user = authenticate_user(email, password)
-    if not user:
-        return build_error('INVALID_CREDENTIALS', 'Invalid email or password', 401)
+        user = authenticate_user(email, password)
+        if not user:
+            return build_error('INVALID_CREDENTIALS', 'Invalid email or password', 401)
 
-    access_token, refresh_token = generate_tokens(user)
-    response = jsonify({
-        'success': True,
-        'access_token': access_token,
-        'refresh_token': refresh_token,
-        'user': user.to_public_dict(),
-    })
-    response.set_cookie('refresh_token', refresh_token, httponly=True, samesite='Lax', secure=False, max_age=7 * 24 * 60 * 60)
-    return response, 200
+        access_token, refresh_token = generate_tokens(user)
+        response = jsonify({
+            'success': True,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': user.to_public_dict(),
+        })
+        response.set_cookie('refresh_token', refresh_token, httponly=True, samesite='Lax', secure=False, max_age=7 * 24 * 60 * 60)
+        return response, 200
+    except Exception:
+        current_app.logger.exception('Login failed for email=%s', email)
+        return build_error('LOGIN_FAILED', 'Unable to login. Please try again.', 500)
 
 
 @auth_bp.post('/logout')
