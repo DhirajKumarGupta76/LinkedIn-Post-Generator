@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 
-from app.extensions import db
 from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.extensions import db
 
 
 class User(db.Model):
@@ -21,6 +22,9 @@ class User(db.Model):
         nullable=False,
     )
     last_login: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    generated_posts = relationship('GeneratedPost', back_populates='user', cascade='all, delete-orphan')
+    saved_posts = relationship('SavedPost', back_populates='user', cascade='all, delete-orphan')
 
     def to_public_dict(self):
         return {
