@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 
 os.environ['TESTING'] = 'true'
+os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 
 from flask_jwt_extended import create_access_token
 
@@ -10,9 +11,10 @@ from app.extensions import db
 
 
 def setup_app():
-    app = create_app()
-    app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+    })
     with app.app_context():
         db.drop_all()
         db.create_all()

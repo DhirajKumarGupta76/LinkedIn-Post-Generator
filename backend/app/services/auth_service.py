@@ -71,30 +71,34 @@ def create_user(name: str, email: str, password: str):
 
 def create_or_update_oauth_user(name: str, email: str, profile_image: str | None = None):
     normalized_email = email.strip().lower()
-    user = User.query.filter_by(email=normalized_email).first()
+    try:
+        user = User.query.filter_by(email=normalized_email).first()
 
-    if user is None:
-        user = User(
-            name=(name or 'Google User').strip()[:120],
-            email=normalized_email,
-            password_hash=hash_password(str(uuid.uuid4())),
-            profile_image=profile_image,
-            email_verified=True,
-            email_verified_at=datetime.now(timezone.utc),
-        )
-        db.session.add(user)
-    else:
-        user.name = (name or user.name or 'Google User').strip()[:120]
-        if profile_image:
-            user.profile_image = profile_image
-        user.email_verified = True
-        user.email_verified_at = user.email_verified_at or datetime.now(timezone.utc)
-        user.verification_token_hash = None
-        user.verification_token_expires_at = None
+        if user is None:
+            user = User(
+                name=(name or 'Google User').strip()[:120],
+                email=normalized_email,
+                password_hash=hash_password(str(uuid.uuid4())),
+                profile_image=profile_image,
+                email_verified=True,
+                email_verified_at=datetime.now(timezone.utc),
+            )
+            db.session.add(user)
+        else:
+            user.name = (name or user.name or 'Google User').strip()[:120]
+            if profile_image:
+                user.profile_image = profile_image
+            user.email_verified = True
+            user.email_verified_at = user.email_verified_at or datetime.now(timezone.utc)
+            user.verification_token_hash = None
+            user.verification_token_expires_at = None
 
-    user.last_login = datetime.now(timezone.utc)
-    db.session.commit()
-    return user
+        user.last_login = datetime.now(timezone.utc)
+        db.session.commit()
+        return user
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def authenticate_user(email: str, password: str):

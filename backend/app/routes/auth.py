@@ -37,6 +37,28 @@ def build_error(code, message, status_code):
     }), status_code
 
 
+def _cookie_secure():
+    return bool(current_app.config.get('JWT_COOKIE_SECURE', False))
+
+
+def _set_refresh_cookie(response, refresh_token):
+    response.set_cookie(
+        'refresh_token',
+        refresh_token,
+        httponly=True,
+        samesite='Lax',
+        secure=_cookie_secure(),
+        max_age=7 * 24 * 60 * 60,
+        path='/',
+    )
+    return response
+
+
+def _clear_refresh_cookie(response):
+    response.delete_cookie('refresh_token', path='/')
+    return response
+
+
 @auth_bp.get('/google/login-url')
 def google_login_url():
     client_id = current_app.config.get('GOOGLE_CLIENT_ID')
@@ -58,24 +80,28 @@ def google_login_url():
 
 @auth_bp.get('/google/callback')
 def google_callback():
+    ensure_database_schema(current_app)
     error = request.args.get('error')
     error_description = request.args.get('error_description') or request.args.get('message')
+    frontend_url = current_app.config.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
+
     if error:
-        frontend_url = current_app.config.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
         callback_error = error_description or error
         query = urlencode({'google': 'error', 'message': callback_error})
         return redirect(f'{frontend_url}/login?{query}')
 
     code = request.args.get('code')
     if not code:
-        return build_error('GOOGLE_AUTH_FAILED', 'Google login failed. Please try again.', 400)
+        query = urlencode({'google': 'error', 'message': 'Google login failed. Please try again.'})
+        return redirect(f'{frontend_url}/login?{query}')
 
     client_id = current_app.config.get('GOOGLE_CLIENT_ID')
     client_secret = current_app.config.get('GOOGLE_CLIENT_SECRET')
     redirect_uri = current_app.config.get('GOOGLE_REDIRECT_URI') or request.url_root.rstrip('/') + '/api/auth/google/callback'
 
     if not client_id or not client_secret:
-        return build_error('GOOGLE_CONFIG_MISSING', 'Google OAuth is not configured for this app.', 500)
+        query = urlencode({'google': 'error', 'message': 'Google OAuth is not configured for this app.'})
+        return redirect(f'{frontend_url}/login?{query}')
 
     try:
         token_response = requests.post(
@@ -93,7 +119,8 @@ def google_callback():
         access_token = token_payload.get('access_token')
         if token_response.status_code >= 400 or not access_token:
             message = token_payload.get('error_description') or token_payload.get('error') or 'Google login could not be completed.'
-            return build_error('GOOGLE_AUTH_FAILED', f'Google login failed: {message}', 401)
+            query = urlencode({'google': 'error', 'message': message})
+            return redirect(f'{frontend_url}/login?{query}')
 
         userinfo_response = requests.get(
             'https://openidconnect.googleapis.com/v1/userinfo',
@@ -103,7 +130,8 @@ def google_callback():
         userinfo = userinfo_response.json()
         email = (userinfo.get('email') or '').strip().lower()
         if not email:
-            return build_error('GOOGLE_AUTH_FAILED', 'Google account email could not be retrieved.', 401)
+            query = urlencode({'google': 'error', 'message': 'Google account email could not be retrieved.'})
+            return redirect(f'{frontend_url}/login?{query}')
 
         user = create_or_update_oauth_user(
             name=userinfo.get('name') or userinfo.get('given_name') or email.split('@')[0],
@@ -112,20 +140,18 @@ def google_callback():
         )
 
         _, refresh_token = generate_tokens(user)
-        frontend_url = current_app.config.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
         response = redirect(f'{frontend_url}/login?google=success')
-        response.set_cookie(
-            'refresh_token',
-            refresh_token,
-            httponly=True,
-            samesite='Lax',
-            secure=not current_app.config.get('TESTING', False),
-            max_age=7 * 24 * 60 * 60,
-        )
-        return response
+        return _set_refresh_cookie(response, refresh_token)
     except requests.RequestException as exc:
         current_app.logger.exception('Google OAuth exchange failed')
-        return build_error('GOOGLE_AUTH_FAILED', f'Google login could not be completed: {exc}', 500)
+        db.session.rollback()
+        query = urlencode({'google': 'error', 'message': f'Google login could not be completed: {exc}'})
+        return redirect(f'{frontend_url}/login?{query}')
+    except Exception:
+        current_app.logger.exception('Google OAuth callback failed')
+        db.session.rollback()
+        query = urlencode({'google': 'error', 'message': 'Google login could not be completed. Please try again.'})
+        return redirect(f'{frontend_url}/login?{query}')
 
 
 @auth_bp.post('/register')
@@ -242,10 +268,11 @@ def login():
             'refresh_token': refresh_token,
             'user': user.to_public_dict(),
         })
-        response.set_cookie('refresh_token', refresh_token, httponly=True, samesite='Lax', secure=not current_app.config.get('TESTING', False), max_age=7 * 24 * 60 * 60)
+        _set_refresh_cookie(response, refresh_token)
         return response, 200
     except Exception:
         current_app.logger.exception('Login failed for email=%s', email)
+        db.session.rollback()
         return build_error('LOGIN_FAILED', 'Unable to login. Please try again.', 500)
 
 
@@ -260,7 +287,7 @@ def logout():
         'success': True,
         'message': 'Logged out successfully.',
     })
-    response.delete_cookie('refresh_token')
+    _clear_refresh_cookie(response)
     return response, 200
 
 
@@ -273,6 +300,8 @@ def refresh():
     from flask_jwt_extended import decode_token
     try:
         payload = decode_token(refresh_token)
+        if payload.get('type') != 'refresh':
+            return build_error('INVALID_TOKEN', 'Refresh token is invalid or expired.', 401)
         identity = payload.get('sub')
         jti = payload.get('jti')
         blocklist = current_app.config.get('JWT_BLOCKLIST', set())
@@ -281,15 +310,23 @@ def refresh():
     except Exception:
         return build_error('INVALID_TOKEN', 'Refresh token is invalid or expired.', 401)
 
-    user = User.query.get(int(identity))
+    try:
+        user = User.query.get(int(identity))
+    except Exception:
+        current_app.logger.exception('Refresh token user lookup failed')
+        db.session.rollback()
+        return build_error('INVALID_TOKEN', 'Refresh token is invalid or expired.', 401)
+
     if not user:
         return build_error('INVALID_TOKEN', 'Refresh token is invalid or expired.', 401)
 
-    access_token, _ = generate_tokens(user)
-    return jsonify({
+    access_token, new_refresh_token = generate_tokens(user)
+    response = jsonify({
         'success': True,
         'access_token': access_token,
-    }), 200
+    })
+    _set_refresh_cookie(response, new_refresh_token)
+    return response, 200
 
 
 @auth_bp.post('/change-password')

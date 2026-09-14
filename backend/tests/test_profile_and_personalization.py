@@ -1,14 +1,16 @@
 import os
 
 os.environ['TESTING'] = 'true'
+os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 
 from app import create_app
 
 
 def setup_app():
-    app = create_app()
-    app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+    })
     with app.app_context():
         from app.extensions import db
         db.drop_all()

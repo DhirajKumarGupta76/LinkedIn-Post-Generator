@@ -13,7 +13,8 @@ for env_path in (
     Path.cwd() / '.env',
 ):
     if env_path.exists():
-        load_dotenv(env_path, override=True)
+        # Do not override vars already set by the process (tests, shells, CI).
+        load_dotenv(env_path, override=False)
 
 
 def _require_secret(name: str, *, minimum_bytes: int = 32):
@@ -28,7 +29,12 @@ def _require_secret(name: str, *, minimum_bytes: int = 32):
 def get_config():
     testing = os.getenv('TESTING') == 'true'
     database_url = os.getenv('DATABASE_URL') or ('sqlite:///:memory:' if testing else 'sqlite:///postgen_ai.db')
-    cors_origins = os.getenv('CORS_ORIGINS') or 'http://localhost:5173,http://localhost:5174,http://localhost:5175,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175'
+    cors_origins = os.getenv('CORS_ORIGINS') or (
+        'http://localhost:5173,http://localhost:5174,http://localhost:5175,'
+        'http://localhost:5182,http://localhost:5183,'
+        'http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,'
+        'http://127.0.0.1:5182,http://127.0.0.1:5183'
+    )
     secret_key = os.getenv('SECRET_KEY') or os.getenv('JWT_SECRET_KEY')
     jwt_secret = os.getenv('JWT_SECRET_KEY')
     jwt_refresh_secret = os.getenv('JWT_REFRESH_SECRET_KEY')
@@ -49,6 +55,10 @@ def get_config():
     if len(jwt_refresh_secret.encode('utf-8')) < 32:
         raise RuntimeError('JWT_REFRESH_SECRET_KEY must be at least 32 bytes long for SHA256 security.')
 
+    debug = os.getenv('FLASK_ENV', 'development') == 'development' and not testing
+    # Secure cookies break on plain HTTP localhost; enable only for non-debug deployments.
+    cookie_secure = os.getenv('COOKIE_SECURE', 'false' if (testing or debug) else 'true').lower() == 'true'
+
     return {
         'DATABASE_URL': database_url,
         'TESTING': testing,
@@ -60,9 +70,10 @@ def get_config():
         'JWT_TOKEN_LOCATION': ['headers', 'cookies'],
         'JWT_HEADER_NAME': 'Authorization',
         'JWT_HEADER_TYPE': 'Bearer',
-        'JWT_COOKIE_SECURE': not testing,
+        'JWT_COOKIE_SECURE': cookie_secure,
         'JWT_COOKIE_SAMESITE': 'Lax',
         'JWT_COOKIE_HTTPONLY': True,
+        'JWT_COOKIE_CSRF_PROTECT': False,
         'JWT_BLACKLIST_ENABLED': True,
         'CORS_ORIGINS': [
             origin.strip()
@@ -78,7 +89,7 @@ def get_config():
         'SMTP_USERNAME': os.getenv('SMTP_USERNAME', ''),
         'SMTP_PASSWORD': os.getenv('SMTP_PASSWORD', ''),
         'SMTP_FROM_EMAIL': os.getenv('SMTP_FROM_EMAIL', 'noreply@postgen-ai.local'),
-        'DEBUG': os.getenv('FLASK_ENV', 'development') == 'development' and not testing,
+        'DEBUG': debug,
         'SQLALCHEMY_DATABASE_URI': database_url,
         'SQLALCHEMY_TRACK_MODIFICATIONS': False,
         'ENCRYPTION_KEY': os.getenv('ENCRYPTION_KEY') or 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
@@ -90,8 +101,8 @@ def get_config():
         'AI_MAX_OUTPUT_CHARS': int(os.getenv('AI_MAX_OUTPUT_CHARS', 2500)),
         'AI_REQUEST_TIMEOUT': int(os.getenv('AI_REQUEST_TIMEOUT', 20)),
         'AI_GENERATION_LIMIT_PER_USER': int(os.getenv('AI_GENERATION_LIMIT_PER_USER', 10)),
-        'SESSION_COOKIE_SECURE': not testing,
+        'SESSION_COOKIE_SECURE': cookie_secure,
         'SESSION_COOKIE_HTTPONLY': True,
         'SESSION_COOKIE_SAMESITE': 'Lax',
-        'PREFERRED_URL_SCHEME': 'https' if not testing else 'http',
+        'PREFERRED_URL_SCHEME': 'https' if cookie_secure else 'http',
     }

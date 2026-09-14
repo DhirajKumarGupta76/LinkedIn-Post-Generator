@@ -3,6 +3,7 @@ import os
 import pytest
 
 os.environ['TESTING'] = 'true'
+os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 
 from sqlalchemy import text
 
@@ -11,12 +12,13 @@ from app.config import get_config
 from app.extensions import db
 
 
-def setup_app():
-    app = create_app()
-    app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+def setup_app(**overrides):
+    app = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+        **overrides,
+    })
     with app.app_context():
-        from app.extensions import db
         db.drop_all()
         db.create_all()
     return app
@@ -82,9 +84,10 @@ def test_register_legacy_sqlite_schema_is_migrated(tmp_path):
     db_path = tmp_path / 'legacy_postgen.db'
     legacy_db_url = f'sqlite:///{db_path}'
 
-    app = create_app()
-    app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = legacy_db_url
+    app = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': legacy_db_url,
+    })
 
     with app.app_context():
         db.session.execute(text('''

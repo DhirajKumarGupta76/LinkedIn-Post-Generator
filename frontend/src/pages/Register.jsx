@@ -3,12 +3,10 @@ import { ArrowLeft, Eye, EyeOff, Mail } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import Button from '../components/Button'
 import Input from '../components/Input'
-import useAuth from '../hooks/useAuth'
 import { getGoogleLoginUrl, registerUser } from '../services/api'
 
 export default function Register() {
   const navigate = useNavigate()
-  const { login } = useAuth()
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -64,10 +62,11 @@ export default function Register() {
     }
 
     try {
-      const response = await registerUser(form)
-      const { access_token: accessToken, refresh_token: refreshToken, user } = response.data
-      await login(user, accessToken, refreshToken)
-      navigate('/dashboard', { replace: true })
+      await registerUser(form)
+      navigate('/login', {
+        replace: true,
+        state: { message: 'Registration successful. Please log in with your email and password.' },
+      })
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Unable to create account. Please try again.')
     } finally {

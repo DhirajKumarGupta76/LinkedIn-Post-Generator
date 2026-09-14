@@ -1,9 +1,7 @@
 import logging
-import os
 import time
 import uuid
 from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone
 
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
@@ -14,26 +12,6 @@ from sqlalchemy import inspect, text
 from app.config import get_config
 from app.extensions import db, jwt, limiter, migrate
 from app.models.user import User
-
-
-class RebindingConfig(dict):
-    def __init__(self, original_config, app):
-        super().__init__(original_config)
-        self._app = app
-
-    def __setitem__(self, key, value):
-        super().__setitem__(key, value)
-        if key == 'SQLALCHEMY_DATABASE_URI':
-            try:
-                if self._app is not None:
-                    from app import _rebind_database_for_app
-                    _rebind_database_for_app(self._app)
-            except Exception:
-                pass
-
-    def update(self, *args, **kwargs):
-        for key, value in dict(*args, **kwargs).items():
-            self[key] = value
 
 
 def ensure_database_schema(app):
@@ -61,38 +39,13 @@ def ensure_database_schema(app):
             db.session.commit()
 
 
-def _rebind_database_for_app(app):
-    configured_uri = app.config.get('SQLALCHEMY_DATABASE_URI')
-    if not configured_uri:
-        return
-
-    engines = db._app_engines.setdefault(app, {})
-    current_engine = engines.get(None)
-    if current_engine is not None and str(current_engine.url) == str(configured_uri):
-        return
-
-    for engine in list(engines.values()):
-        engine.dispose()
-    engines.clear()
-
-    engine_options = db._engine_options.copy()
-    engine_options.update(app.config.get('SQLALCHEMY_ENGINE_OPTIONS', {}))
-    engine_options['url'] = configured_uri
-    engine_options.setdefault('echo', app.config.get('SQLALCHEMY_ECHO', False))
-    engine_options.setdefault('echo_pool', app.config.get('SQLALCHEMY_ECHO', False))
-
-    db._apply_driver_defaults(engine_options, app)
-    db._make_metadata(None)
-    engines[None] = db._make_engine(None, engine_options, app)
-    db.session.remove()
-
-
-def create_app():
+def create_app(config_overrides=None):
     load_dotenv()
 
     app = Flask(__name__)
-    app.config = RebindingConfig(app.config, app)
     app.config.update(get_config())
+    if config_overrides:
+        app.config.update(config_overrides)
     if not app.config.get('TESTING'):
         app.config.setdefault('JSON_AS_ASCII', False)
     app.config.setdefault('JWT_BLOCKLIST', set())
@@ -104,14 +57,7 @@ def create_app():
     limiter.init_app(app)
     migrate.init_app(app, db)
 
-    @app.before_request
-    def refresh_db_on_request():
-        configured_uri = app.config.get('SQLALCHEMY_DATABASE_URI')
-        current_engine = db._app_engines.get(app, {}).get(None)
-        if configured_uri and current_engine is not None and str(current_engine.url) != str(configured_uri):
-            _rebind_database_for_app(app)
-
-    cors_origins = app.config.get('CORS_ORIGINS', ['http://localhost:5182'])
+    cors_origins = app.config.get('CORS_ORIGINS', ['http://localhost:5173'])
     if isinstance(cors_origins, str):
         cors_origins = [cors_origins]
 
