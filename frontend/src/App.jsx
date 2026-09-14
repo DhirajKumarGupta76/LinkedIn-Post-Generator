@@ -10,6 +10,7 @@ import History from './pages/History'
 import SavedPosts from './pages/SavedPosts'
 import Profile from './pages/Profile'
 import Settings from './pages/Settings'
+import VerifyEmail from './pages/VerifyEmail'
 
 function AppRoutes() {
   return (
@@ -17,6 +18,7 @@ function AppRoutes() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route
         path="/dashboard"
         element={

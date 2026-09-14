@@ -4,22 +4,50 @@ services:
   backend:
     build:
       context: ./backend
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:change_me_in_production@postgres:5432/postgen_ai}
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_REFRESH_SECRET_KEY: ${JWT_REFRESH_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:5000/api/auth/google/callback}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_ENDPOINT: ${AI_ENDPOINT:-https://api.openai.com/v1/chat/completions}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      MAX_REQUEST_SIZE: ${MAX_REQUEST_SIZE:-1048576}
+      RATELIMIT_DEFAULT: ${RATELIMIT_DEFAULT:-10/minute}
+      AI_MAX_INPUT_CHARS: ${AI_MAX_INPUT_CHARS:-4000}
+      AI_MAX_OUTPUT_CHARS: ${AI_MAX_OUTPUT_CHARS:-2500}
+      AI_REQUEST_TIMEOUT: ${AI_REQUEST_TIMEOUT:-20}
+      AI_GENERATION_LIMIT_PER_USER: ${AI_GENERATION_LIMIT_PER_USER:-10}
     ports:
       - "5000:5000"
-    environment:
-      FLASK_APP: run.py
-      FLASK_ENV: development
-      CORS_ORIGINS: http://localhost:5173
-    volumes:
-      - ./backend:/app
-    command: python run.py
+    depends_on:
+      - postgres
+    command: gunicorn run:app --bind 0.0.0.0:5000 --workers 2 --timeout 60
 
-  db:
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000/api}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: postgen_ai
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-postgen_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_production}
     ports:
       - "5432:5432"
     volumes:

@@ -1,10 +1,10 @@
-import { useState } from 'react'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Eye, EyeOff, Mail } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import Button from '../components/Button'
 import Input from '../components/Input'
 import useAuth from '../hooks/useAuth'
-import { loginUser } from '../services/api'
+import api, { getGoogleLoginUrl, getCurrentUser, loginUser } from '../services/api'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -58,6 +58,49 @@ export default function Login() {
     }
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const googleStatus = params.get('google')
+
+    if (googleStatus === 'error') {
+      const googleMessage = params.get('message') || 'Google sign-in was denied.'
+      setError(decodeURIComponent(googleMessage))
+      return
+    }
+
+    if (googleStatus !== 'success') {
+      return
+    }
+
+    const finalizeGoogleLogin = async () => {
+      try {
+        const response = await api.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'}/auth/refresh`, {}, { withCredentials: true })
+        const accessToken = response.data.access_token
+        const userResponse = await getCurrentUser()
+        await login(userResponse.data.user, accessToken)
+        navigate('/dashboard', { replace: true })
+      } catch (err) {
+        const message = err.response?.data?.error?.message || err.message || 'Google sign-in could not be completed.'
+        setError(message)
+      }
+    }
+
+    finalizeGoogleLogin()
+  }, [location.search, login, navigate])
+
+  const handleGmailLogin = async () => {
+    try {
+      const response = await getGoogleLoginUrl()
+      if (!response?.data?.auth_url) {
+        throw new Error('Google login URL missing')
+      }
+
+      window.location.href = response.data.auth_url
+    } catch (err) {
+      setError('Google login is unavailable right now. Please check the backend OAuth configuration and restart the backend if needed.')
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50">
@@ -96,6 +139,22 @@ export default function Login() {
             {loading ? 'Logging in...' : 'Login'}
           </Button>
         </form>
+
+        <div className="mt-6 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-slate-400">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span>or</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-4 w-full justify-center gap-2"
+          onClick={handleGmailLogin}
+        >
+          <Mail className="h-4 w-4" />
+          Continue with Gmail
+        </Button>
 
         <p className="mt-6 text-center text-sm text-slate-600">
           Don’t have an account?{' '}
