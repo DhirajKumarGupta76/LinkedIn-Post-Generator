@@ -100,4 +100,33 @@ The backend exposes:
 - PostgreSQL and database integration are planned for future steps.
 
 
+Terminal 1 — Backend
+cd "C:\Users\Asus\OneDrive\Desktop\LinkedIn Post Generator\postgen-ai\backend"
+
 .\.venv\Scripts\Activate.ps1
+
+python run.py
+
+If your project uses Flask directly instead of run.py, use:
+
+flask run
+
+Keep this terminal running.
+
+You should see the Flask server on something like:
+
+http://127.0.0.1:5000
+
+Terminal 2 — Frontend
+
+Open a new PowerShell:
+
+cd "C:\Users\Asus\OneDrive\Desktop\LinkedIn Post Generator\postgen-ai\frontend"
+npm install
+npm run dev
+
+You should get something like:
+
+Local: http://localhost:5173/
+
+Open that URL in your browser.
