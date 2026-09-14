@@ -98,3 +98,6 @@ The backend exposes:
 - Real AI generation is intentionally not implemented in this step.
 - Authentication is basic scaffold logic only and will be expanded later.
 - PostgreSQL and database integration are planned for future steps.
+
+
+.\.venv\Scripts\Activate.ps1

@@ -26,6 +26,10 @@ class User(db.Model):
     github_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     portfolio_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     personal_brand_mode: Mapped[bool] = mapped_column(default=False, nullable=False)
+    email_verified: Mapped[bool] = mapped_column(default=False, nullable=False)
+    email_verified_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    verification_token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    verification_token_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc),
@@ -55,6 +59,8 @@ class User(db.Model):
             'github_url': self.github_url,
             'portfolio_url': self.portfolio_url,
             'personal_brand_mode': self.personal_brand_mode,
+            'email_verified': self.email_verified,
+            'email_verified_at': self.email_verified_at.isoformat() if self.email_verified_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None,

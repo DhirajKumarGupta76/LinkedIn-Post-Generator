@@ -1,14 +1,12 @@
 import { useState } from 'react'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Mail } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import Button from '../components/Button'
 import Input from '../components/Input'
-import useAuth from '../hooks/useAuth'
-import { registerUser } from '../services/api'
+import { getGoogleLoginUrl, registerUser } from '../services/api'
 
 export default function Register() {
   const navigate = useNavigate()
-  const { login } = useAuth()
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -64,14 +62,28 @@ export default function Register() {
     }
 
     try {
-      const response = await registerUser(form)
-      const { access_token: accessToken, refresh_token: refreshToken, user } = response.data
-      await login(user, accessToken, refreshToken)
-      navigate('/dashboard', { replace: true })
+      await registerUser(form)
+      navigate('/login', {
+        replace: true,
+        state: { message: 'Registration successful. Please log in with your email and password.' },
+      })
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Unable to create account. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGmailLogin = async () => {
+    try {
+      const response = await getGoogleLoginUrl()
+      if (!response?.data?.auth_url) {
+        throw new Error('Google login URL missing')
+      }
+
+      window.location.href = response.data.auth_url
+    } catch (err) {
+      setError(err.response?.data?.error?.message || err.message || 'Google login is unavailable right now. Please check the backend OAuth configuration and restart the backend if needed.')
     }
   }
 
@@ -133,6 +145,22 @@ export default function Register() {
             {loading ? 'Creating account...' : 'Create account'}
           </Button>
         </form>
+
+        <div className="mt-6 flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-slate-400">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span>or</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-4 w-full justify-center gap-2"
+          onClick={handleGmailLogin}
+        >
+          <Mail className="h-4 w-4" />
+          Continue with Gmail
+        </Button>
 
         <p className="mt-6 text-center text-sm text-slate-600">
           Already have an account?{' '}

@@ -2,21 +2,14 @@ import { Sparkles, Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Button from './Button'
 import useAuth from '../hooks/useAuth'
-import { logoutUser } from '../services/api'
 
 export default function Navbar({ onMenuClick }) {
   const navigate = useNavigate()
   const { isAuthenticated, logout } = useAuth()
 
   const handleLogout = async () => {
-    try {
-      await logoutUser()
-    } catch (error) {
-      // Ignore logout API failures and ensure local state is cleared.
-    } finally {
-      logout()
-      navigate('/login', { replace: true })
-    }
+    await logout()
+    navigate('/login', { replace: true })
   }
 
   return (
