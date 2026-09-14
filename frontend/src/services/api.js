@@ -44,7 +44,7 @@ const redirectToLogin = () => {
 }
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 10000,
   withCredentials: true,
 })
@@ -98,11 +98,11 @@ api.interceptors.response.use(
     isRefreshing = true
 
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'}/auth/refresh`,
-        {},
-        { withCredentials: true },
-      )
+     const response = await api.post(
+  '/auth/refresh',
+  {},
+  { withCredentials: true },
+)
 
       const nextAccessToken = response.data?.access_token
       if (!nextAccessToken) {
