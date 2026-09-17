@@ -29,12 +29,20 @@ def _require_secret(name: str, *, minimum_bytes: int = 32):
 def get_config():
     testing = os.getenv('TESTING') == 'true'
     database_url = os.getenv('DATABASE_URL') or ('sqlite:///:memory:' if testing else 'sqlite:///postgen_ai.db')
-    cors_origins = os.getenv('CORS_ORIGINS') or (
+
+    # Vercel serverless filesystem is read-only except /tmp. Prefer a real Postgres DATABASE_URL.
+    if not testing and os.getenv('VERCEL') and database_url.startswith('sqlite:///'):
+        database_url = 'sqlite:////tmp/postgen_ai.db'
+
+    default_cors = (
         'http://localhost:5173,http://localhost:5174,http://localhost:5175,'
         'http://localhost:5182,http://localhost:5183,'
         'http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,'
-        'http://127.0.0.1:5182,http://127.0.0.1:5183'
+        'http://127.0.0.1:5182,http://127.0.0.1:5183,'
+        'https://linked-in-post-generator-dhiru.vercel.app,'
+        'https://linked-in-post-generator-git-main-dhiru.vercel.app'
     )
+    cors_origins = os.getenv('CORS_ORIGINS') or default_cors
     secret_key = os.getenv('SECRET_KEY') or os.getenv('JWT_SECRET_KEY')
     jwt_secret = os.getenv('JWT_SECRET_KEY')
     jwt_refresh_secret = os.getenv('JWT_REFRESH_SECRET_KEY')
@@ -55,9 +63,53 @@ def get_config():
     if len(jwt_refresh_secret.encode('utf-8')) < 32:
         raise RuntimeError('JWT_REFRESH_SECRET_KEY must be at least 32 bytes long for SHA256 security.')
 
-    debug = os.getenv('FLASK_ENV', 'development') == 'development' and not testing
-    # Secure cookies break on plain HTTP localhost; enable only for non-debug deployments.
-    cookie_secure = os.getenv('COOKIE_SECURE', 'false' if (testing or debug) else 'true').lower() == 'true'
+    on_vercel = bool(os.getenv('VERCEL'))
+    flask_env = os.getenv('FLASK_ENV', 'production' if on_vercel else 'development')
+    debug = flask_env == 'development' and not testing and not on_vercel
+
+    cookie_secure_env = os.getenv('COOKIE_SECURE')
+    if testing:
+        cookie_secure = False
+    elif cookie_secure_env is not None:
+        cookie_secure = cookie_secure_env.lower() == 'true'
+    else:
+        # Secure cookies on Vercel/HTTPS hosts only. Local HTTP keeps Secure=False
+        # even if FLASK_ENV was set to production by mistake.
+        cookie_secure = on_vercel or (
+            flask_env == 'production' and os.getenv('FORCE_HTTPS', '').lower() == 'true'
+        )
+
+    frontend_base_url = os.getenv('FRONTEND_BASE_URL') or (
+        f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}"
+        if os.getenv('VERCEL_PROJECT_PRODUCTION_URL')
+        else 'http://localhost:5173'
+    )
+
+    google_redirect_uri = os.getenv('GOOGLE_REDIRECT_URI') or (
+        f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}/api/auth/google/callback"
+        if os.getenv('VERCEL_PROJECT_PRODUCTION_URL')
+        else 'http://localhost:5000/api/auth/google/callback'
+    )
+
+    origin_set = []
+    for origin in cors_origins.split(','):
+        cleaned = origin.strip().rstrip('/')
+        if cleaned and cleaned not in origin_set:
+            origin_set.append(cleaned)
+
+    # Always allow the configured frontend and Vercel deployment hosts.
+    for candidate in (
+        frontend_base_url,
+        os.getenv('VERCEL_URL'),
+        os.getenv('VERCEL_BRANCH_URL'),
+        os.getenv('VERCEL_PROJECT_PRODUCTION_URL'),
+    ):
+        if not candidate:
+            continue
+        origin = candidate if candidate.startswith('http') else f'https://{candidate}'
+        origin = origin.rstrip('/')
+        if origin not in origin_set:
+            origin_set.append(origin)
 
     return {
         'DATABASE_URL': database_url,
@@ -75,15 +127,11 @@ def get_config():
         'JWT_COOKIE_HTTPONLY': True,
         'JWT_COOKIE_CSRF_PROTECT': False,
         'JWT_BLACKLIST_ENABLED': True,
-        'CORS_ORIGINS': [
-            origin.strip()
-            for origin in cors_origins.split(',')
-            if origin.strip()
-        ],
+        'CORS_ORIGINS': origin_set,
         'GOOGLE_CLIENT_ID': os.getenv('GOOGLE_CLIENT_ID', ''),
         'GOOGLE_CLIENT_SECRET': os.getenv('GOOGLE_CLIENT_SECRET', ''),
-        'GOOGLE_REDIRECT_URI': os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5000/api/auth/google/callback'),
-        'FRONTEND_BASE_URL': os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173'),
+        'GOOGLE_REDIRECT_URI': google_redirect_uri,
+        'FRONTEND_BASE_URL': frontend_base_url.rstrip('/'),
         'SMTP_HOST': os.getenv('SMTP_HOST', ''),
         'SMTP_PORT': int(os.getenv('SMTP_PORT', 587)),
         'SMTP_USERNAME': os.getenv('SMTP_USERNAME', ''),

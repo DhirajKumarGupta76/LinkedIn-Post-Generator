@@ -43,8 +43,31 @@ const redirectToLogin = () => {
   window.location.href = '/login'
 }
 
+const resolveApiBaseUrl = () => {
+  const configured = (import.meta.env.VITE_API_BASE_URL || '').trim()
+
+  // Production must never call localhost — even if a Vercel env var was mis-set.
+  if (import.meta.env.PROD && configured && /localhost|127\.0\.0\.1/i.test(configured)) {
+    console.error(
+      '[PostGen AI] Ignoring VITE_API_BASE_URL pointing at localhost in production. Using same-origin /api.',
+    )
+    return '/api'
+  }
+
+  if (configured) {
+    return configured.replace(/\/$/, '')
+  }
+
+  // Same-origin `/api` works for:
+  // - local Vite (proxied to Flask in vite.config.js)
+  // - Vercel (rewritten to the Flask backend service)
+  return '/api'
+}
+
+export const API_BASE_URL = resolveApiBaseUrl()
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: API_BASE_URL,
   timeout: 10000,
   withCredentials: true,
 })

@@ -95,38 +95,67 @@ The backend exposes:
 
 ## Notes
 
-- Real AI generation is intentionally not implemented in this step.
-- Authentication is basic scaffold logic only and will be expanded later.
-- PostgreSQL and database integration are planned for future steps.
+- Frontend API calls use relative `/api` by default (Vite proxy locally; Vercel rewrite in production).
+- Never set `VITE_API_BASE_URL=http://localhost:5000` in Vercel — production would call localhost.
+- Google Client Secret and JWT secrets belong only in backend / Vercel server env vars.
 
+## Vercel deployment
+
+This repo uses Vercel Services (`vercel.json`):
+
+- `frontend/` → Vite React app
+- `backend/` → Flask (`main:app`)
+- `/api/*` → rewritten to the Flask service
+
+### Required Vercel Environment Variables (Production + Preview)
+
+Backend / shared (do **not** prefix with `VITE_`):
+
+- `SECRET_KEY`
+- `JWT_SECRET_KEY`
+- `JWT_REFRESH_SECRET_KEY`
+- `ENCRYPTION_KEY`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI=https://linked-in-post-generator-dhiru.vercel.app/api/auth/google/callback`
+- `FRONTEND_BASE_URL=https://linked-in-post-generator-dhiru.vercel.app`
+- `CORS_ORIGINS=https://linked-in-post-generator-dhiru.vercel.app,https://linked-in-post-generator-git-main-dhiru.vercel.app`
+- `DATABASE_URL` (Postgres recommended; SQLite on Vercel is ephemeral under `/tmp`)
+- `COOKIE_SECURE=true`
+- `FLASK_ENV=production`
+- Optional AI keys as needed
+
+Frontend:
+
+- Leave `VITE_API_BASE_URL` **unset** (uses same-origin `/api`)
+
+### Google Cloud Console
+
+Authorized redirect URI must exactly match:
+
+`https://linked-in-post-generator-dhiru.vercel.app/api/auth/google/callback`
+
+Also keep the local URI for development:
+
+`http://localhost:5000/api/auth/google/callback`
+
+### Local run
 
 Terminal 1 — Backend
-cd "C:\Users\Asus\OneDrive\Desktop\LinkedIn Post Generator\postgen-ai\backend"
 
-.\.venv\Scripts\Activate.ps1
-
+```bash
+cd backend
+.\.venv\Scripts\Activate.ps1   # Windows
 python run.py
-
-If your project uses Flask directly instead of run.py, use:
-
-flask run
-
-Keep this terminal running.
-
-You should see the Flask server on something like:
-
-http://127.0.0.1:5000
+```
 
 Terminal 2 — Frontend
 
-Open a new PowerShell:
-
-cd "C:\Users\Asus\OneDrive\Desktop\LinkedIn Post Generator\postgen-ai\frontend"
+```bash
+cd frontend
 npm install
 npm run dev
+```
 
-You should get something like:
-
-Local: http://localhost:5173/
-
-Open that URL in your browser.
+Frontend: http://localhost:5173/  
+Backend: http://127.0.0.1:5000/api/health

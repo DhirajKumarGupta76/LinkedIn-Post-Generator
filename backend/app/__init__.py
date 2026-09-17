@@ -8,6 +8,7 @@ from flask_cors import CORS
 from flask_limiter.errors import RateLimitExceeded
 from dotenv import load_dotenv
 from sqlalchemy import inspect, text
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import get_config
 from app.extensions import db, jwt, limiter, migrate
@@ -15,6 +16,10 @@ from app.models.user import User
 
 
 def ensure_database_schema(app):
+    # Import models so metadata is complete before create_all.
+    import app.models.generated_post  # noqa: F401
+    import app.models.saved_post  # noqa: F401
+
     with app.app_context():
         inspector = inspect(db.engine)
         if not inspector.has_table('users'):
@@ -43,6 +48,8 @@ def create_app(config_overrides=None):
     load_dotenv()
 
     app = Flask(__name__)
+    # Trust Vercel / reverse-proxy headers so request.url_root is https://...
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     app.config.update(get_config())
     if config_overrides:
         app.config.update(config_overrides)

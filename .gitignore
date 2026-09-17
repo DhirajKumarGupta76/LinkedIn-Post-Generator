@@ -5,9 +5,14 @@ __pycache__/
 .venv/
 venv/
 .env
-.env.*
+.env.local
+.env.*.local
 .DS_Store
 node_modules/
 dist/
 coverage/
 .pytest_cache/
+!.env.example
+!frontend/.env.example
+!frontend/.env.development
+!frontend/.env.production
