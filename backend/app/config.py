@@ -80,17 +80,24 @@ def get_config():
             flask_env == 'production' and os.getenv('FORCE_HTTPS', '').lower() == 'true'
         )
 
-    frontend_base_url = os.getenv('FRONTEND_BASE_URL') or (
-        f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}"
-        if os.getenv('VERCEL_PROJECT_PRODUCTION_URL')
-        else 'http://localhost:5173'
-    )
+    # Canonical production host for this project (not preview/alias hosts like *-wheat-*).
+    canonical_production_origin = 'https://linked-in-post-generator-dhiru.vercel.app'
 
-    google_redirect_uri = os.getenv('GOOGLE_REDIRECT_URI') or (
-        f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}/api/auth/google/callback"
-        if os.getenv('VERCEL_PROJECT_PRODUCTION_URL')
-        else 'http://localhost:5000/api/auth/google/callback'
-    )
+    frontend_base_url = os.getenv('FRONTEND_BASE_URL')
+    if not frontend_base_url:
+        if on_vercel:
+            # Prefer the stable dhiru production domain over VERCEL_PROJECT_PRODUCTION_URL,
+            # which can point at an alternate/alias deployment host.
+            frontend_base_url = canonical_production_origin
+        else:
+            frontend_base_url = 'http://localhost:5173'
+
+    google_redirect_uri = os.getenv('GOOGLE_REDIRECT_URI')
+    if not google_redirect_uri:
+        if on_vercel:
+            google_redirect_uri = f'{canonical_production_origin}/api/auth/google/callback'
+        else:
+            google_redirect_uri = 'http://localhost:5000/api/auth/google/callback'
 
     origin_set = []
     for origin in cors_origins.split(','):

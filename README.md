@@ -151,21 +151,27 @@ Also keep the local URI for development:
 
 ### Local run
 
-Terminal 1 — Backend
+Terminal 1 — Backend (from `postgen-ai/backend`)
 
-```bash
-cd backend
-.\.venv\Scripts\Activate.ps1   # Windows
+```powershell
+# Activate the project venv (path is outside backend/)
+& "C:\Users\Asus\OneDrive\Desktop\LinkedIn Post Generator\.venv-1\Scripts\Activate.ps1"
+
+# Prefer either entry point — both listen on http://127.0.0.1:5000
+python main.py
+# or:
 python run.py
 ```
 
+Do **not** run only `python main.py` on an older build that lacked `if __name__ == '__main__'` — that imported the app and exited immediately (ECONNREFUSED on the Vite proxy).
+
 Terminal 2 — Frontend
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Frontend: http://localhost:5173/  
+Frontend: http://localhost:5173/ (or 5174 if 5173 is busy)  
 Backend: http://127.0.0.1:5000/api/health
