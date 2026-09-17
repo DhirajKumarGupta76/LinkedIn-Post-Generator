@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import uuid
 from collections import defaultdict, deque
@@ -15,12 +16,15 @@ from app.extensions import db, jwt, limiter, migrate
 from app.models.user import User
 
 
-def ensure_database_schema(app):
+def ensure_database_schema(flask_app):
     # Import models so metadata is complete before create_all.
-    import app.models.generated_post  # noqa: F401
-    import app.models.saved_post  # noqa: F401
+    # Use importlib so we do not shadow the flask_app parameter with the `app` package name.
+    import importlib
 
-    with app.app_context():
+    importlib.import_module('app.models.generated_post')
+    importlib.import_module('app.models.saved_post')
+
+    with flask_app.app_context():
         inspector = inspect(db.engine)
         if not inspector.has_table('users'):
             db.create_all()
@@ -58,6 +62,12 @@ def create_app(config_overrides=None):
     app.config.setdefault('JWT_BLOCKLIST', set())
     app.config.setdefault('USER_GENERATION_HISTORY', defaultdict(deque))
     app.config.setdefault('GENERATION_LIMIT_PER_USER', app.config.get('AI_GENERATION_LIMIT_PER_USER', 10))
+
+    db_uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
+    if os.getenv('VERCEL') and db_uri.startswith('sqlite:'):
+        logging.getLogger(__name__).warning(
+            'Using ephemeral SQLite on Vercel (/tmp). Set DATABASE_URL to Postgres for durable production data.',
+        )
 
     db.init_app(app)
     jwt.init_app(app)

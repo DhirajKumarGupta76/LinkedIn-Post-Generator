@@ -16,3 +16,6 @@ coverage/
 !frontend/.env.example
 !frontend/.env.development
 !frontend/.env.production
+
+backend/instance/
+*.db

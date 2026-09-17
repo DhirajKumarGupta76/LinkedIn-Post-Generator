@@ -107,6 +107,16 @@ This repo uses Vercel Services (`vercel.json`):
 - `backend/` → Flask (`main:app`)
 - `/api/*` → rewritten to the Flask service
 
+Frontend API calls use **relative `/api`** in both local and production.  
+Local Vite proxies `/api` → `http://127.0.0.1:5000`.  
+Production Vercel rewrites `/api` → the Flask service.
+
+### Critical: do not use localhost in production
+
+1. In the Vercel project → **Settings → Environment Variables**, **delete** `VITE_API_BASE_URL` if it is set to `http://localhost:5000` (or any localhost value).
+2. Leave `VITE_API_BASE_URL` unset so the build uses same-origin `/api`.
+3. Under **Settings → Deployment Protection**, disable **Vercel Authentication** for Production if the app must be publicly reachable (otherwise visitors are sent to the Vercel login SSO page).
+
 ### Required Vercel Environment Variables (Production + Preview)
 
 Backend / shared (do **not** prefix with `VITE_`):

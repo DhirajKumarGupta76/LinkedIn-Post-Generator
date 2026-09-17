@@ -43,10 +43,16 @@ const redirectToLogin = () => {
   window.location.href = '/login'
 }
 
+/**
+ * Resolve API base URL for local + production.
+ * - Local Vite: relative `/api` (proxied to Flask in vite.config.js)
+ * - Vercel: relative `/api` (rewritten to Flask service)
+ * - Optional absolute VITE_API_BASE_URL for split-host deploys
+ * Never allow localhost defaults in production builds.
+ */
 const resolveApiBaseUrl = () => {
   const configured = (import.meta.env.VITE_API_BASE_URL || '').trim()
 
-  // Production must never call localhost — even if a Vercel env var was mis-set.
   if (import.meta.env.PROD && configured && /localhost|127\.0\.0\.1/i.test(configured)) {
     console.error(
       '[PostGen AI] Ignoring VITE_API_BASE_URL pointing at localhost in production. Using same-origin /api.',
@@ -58,9 +64,6 @@ const resolveApiBaseUrl = () => {
     return configured.replace(/\/$/, '')
   }
 
-  // Same-origin `/api` works for:
-  // - local Vite (proxied to Flask in vite.config.js)
-  // - Vercel (rewritten to the Flask backend service)
   return '/api'
 }
 
@@ -68,7 +71,7 @@ export const API_BASE_URL = resolveApiBaseUrl()
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 15000,
   withCredentials: true,
 })
 
@@ -89,7 +92,11 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    if (requestUrl.includes('/auth/refresh') || requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register')) {
+    if (
+      requestUrl.includes('/auth/refresh')
+      || requestUrl.includes('/auth/login')
+      || requestUrl.includes('/auth/register')
+    ) {
       return Promise.reject(error)
     }
 
@@ -104,7 +111,11 @@ api.interceptors.response.use(
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         refreshSubscribers.push((tokenOrError) => {
-          if (tokenOrError instanceof Error || (tokenOrError && tokenOrError.isAxiosError) || (tokenOrError && tokenOrError.response)) {
+          if (
+            tokenOrError instanceof Error
+            || (tokenOrError && tokenOrError.isAxiosError)
+            || (tokenOrError && tokenOrError.response)
+          ) {
             reject(tokenOrError)
           } else if (!tokenOrError) {
             reject(error)
@@ -121,12 +132,7 @@ api.interceptors.response.use(
     isRefreshing = true
 
     try {
-     const response = await api.post(
-  '/auth/refresh',
-  {},
-  { withCredentials: true },
-)
-
+      const response = await api.post('/auth/refresh', {}, { withCredentials: true })
       const nextAccessToken = response.data?.access_token
       if (!nextAccessToken) {
         throw new Error('Refresh response missing access token')

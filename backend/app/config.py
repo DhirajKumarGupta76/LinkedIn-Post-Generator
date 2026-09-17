@@ -40,7 +40,8 @@ def get_config():
         'http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,'
         'http://127.0.0.1:5182,http://127.0.0.1:5183,'
         'https://linked-in-post-generator-dhiru.vercel.app,'
-        'https://linked-in-post-generator-git-main-dhiru.vercel.app'
+        'https://linked-in-post-generator-git-main-dhiru.vercel.app,'
+        'https://linked-in-post-generator-oj3d55zyg-dhiru.vercel.app'
     )
     cors_origins = os.getenv('CORS_ORIGINS') or default_cors
     secret_key = os.getenv('SECRET_KEY') or os.getenv('JWT_SECRET_KEY')
