@@ -100,4 +100,5 @@ The backend exposes:
 - PostgreSQL and database integration are planned for future steps.
 
 
-.\.venv\Scripts\Activate.ps1
+
+
